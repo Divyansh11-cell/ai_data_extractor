@@ -72,8 +72,26 @@ Source Paragraph:
             with st.spinner("Processing text with Gemini..."):
                 try:
                     genai.configure(api_key=api_key.strip())
+                    
+                    # Auto-detect available flash/pro model for this key to prevent 404 errors
+                    available_models = [
+                        m.name for m in genai.list_models() 
+                        if 'generateContent' in m.supported_generation_methods
+                    ]
+                    
+                    # Preferred order: 2.5-flash -> 2.0-flash -> 1.5-flash -> first available
+                    selected_model = None
+                    for pref in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
+                        match = next((m for m in available_models if pref in m), None)
+                        if match:
+                            selected_model = match
+                            break
+                    
+                    if not selected_model and available_models:
+                        selected_model = available_models[0]
+
                     model = genai.GenerativeModel(
-                        model_name="gemini-1.5-flash",
+                        model_name=selected_model,
                         generation_config={"temperature": 0.1}
                     )
                     response = model.generate_content(prompt)
