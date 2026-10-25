@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 
 st.set_page_config(page_title="AI Data Extractor", page_icon="📋", layout="wide")
 
@@ -9,7 +9,7 @@ st.write(
     "structured schemas (Action Items, JSON, or Key-Value pairs) using low-temperature extraction."
 )
 
-# Fetch the secret key automatically from Streamlit Secrets
+# Fetch API key automatically from Streamlit Secrets
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 col1, col2 = st.columns(2)
@@ -34,7 +34,7 @@ with col2:
     
     if extract_btn:
         if not api_key:
-            st.error("API Key not found! Please add GEMINI_API_KEY in Streamlit Cloud Secrets.")
+            st.error("API Key not found! Please check GEMINI_API_KEY in Streamlit Cloud Secrets.")
         elif not raw_text.strip():
             st.warning("Please paste some text to extract.")
         else:
@@ -69,12 +69,12 @@ Source Paragraph:
 
             with st.spinner("Processing text with Gemini..."):
                 try:
-                    genai.configure(api_key=api_key.strip())
-                    model = genai.GenerativeModel(
-                        model_name="gemini-3.8-flash",
-                        generation_config={"temperature": 0.1}
+                    # Using the modern SDK compatible with all key formats
+                    client = genai.Client(api_key=api_key.strip())
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=prompt,
                     )
-                    response = model.generate_content(prompt)
                     
                     if format_choice == "Structured JSON":
                         st.code(response.text, language="json")
