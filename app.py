@@ -9,10 +9,8 @@ st.write(
     "structured schemas (Action Items, JSON, or Key-Value pairs) using low-temperature extraction."
 )
 
-with st.sidebar:
-    st.header("🔑 Configuration")
-    api_key = st.text_input("Enter Gemini API Key", type="password", placeholder="AIza...")
-    st.markdown("[Get a free Gemini API Key](https://aistudio.google.com/)")
+# Fetch the secret key automatically from Streamlit Secrets
+api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 col1, col2 = st.columns(2)
 
@@ -36,7 +34,7 @@ with col2:
     
     if extract_btn:
         if not api_key:
-            st.error("Please enter your Gemini API Key in the sidebar.")
+            st.error("API Key not found! Please add GEMINI_API_KEY in Streamlit Cloud Secrets.")
         elif not raw_text.strip():
             st.warning("Please paste some text to extract.")
         else:
@@ -72,8 +70,6 @@ Source Paragraph:
             with st.spinner("Processing text with Gemini..."):
                 try:
                     genai.configure(api_key=api_key.strip())
-                    
-                    # Target the updated 3.8-flash model
                     model = genai.GenerativeModel(
                         model_name="gemini-3.8-flash",
                         generation_config={"temperature": 0.1}
