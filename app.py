@@ -1,6 +1,5 @@
 import streamlit as st
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 
 st.set_page_config(page_title="AI Data Extractor", page_icon="📋", layout="wide")
 
@@ -41,18 +40,15 @@ with col2:
         elif not raw_text.strip():
             st.warning("Please paste some text to extract.")
         else:
-            system_instruction = (
-                "You are an expert Data Extraction Engine. Your job is to convert messy, unstructured paragraphs "
-                "into highly organized, deterministic data schemas. Do not extrapolate, infer unmentioned facts, "
-                "or hallucinate. Only extract what is explicitly present in the source text."
-            )
-
             if format_choice == "Action Items & Summary":
                 prompt = f"""
-Analyze the text and output three structured sections:
+You are a Data Extraction Engine. Extract structured data from this text.
+Do not hallucinate or extrapolate facts.
+
+Output format:
 1. Executive Summary (2 sentences max)
 2. Decisions Made (bulleted list, or 'None' if not applicable)
-3. Action Items Table with columns: | Task | Assignee (Who) | Deadline |
+3. Action Items Table: | Task | Assignee (Who) | Deadline |
 
 Source Paragraph:
 \"\"\"{raw_text}\"\"\"
@@ -60,7 +56,7 @@ Source Paragraph:
             elif format_choice == "Structured JSON":
                 prompt = f"""
 Extract all key entities, dates, people, decisions, and tasks from the text into a clean, valid JSON object.
-Enclose the output within standard JSON braces without markdown code blocks or extra text.
+Return ONLY valid JSON without markdown code fences or conversational text.
 
 Source Paragraph:
 \"\"\"{raw_text}\"\"\"
@@ -75,15 +71,12 @@ Source Paragraph:
 
             with st.spinner("Processing text with Gemini..."):
                 try:
-                    client = genai.Client(api_key=api_key.strip())
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            system_instruction=system_instruction,
-                            temperature=0.1
-                        ),
+                    genai.configure(api_key=api_key.strip())
+                    model = genai.GenerativeModel(
+                        model_name="gemini-1.5-flash",
+                        generation_config={"temperature": 0.1}
                     )
+                    response = model.generate_content(prompt)
                     
                     if format_choice == "Structured JSON":
                         st.code(response.text, language="json")
