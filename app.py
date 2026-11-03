@@ -11,13 +11,13 @@ st.write(
 
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
-# Cache model configuration
+# Cache the model so initialization is instant
 @st.cache_resource
 def get_model(key):
     genai.configure(api_key=key.strip())
-    # Flash-Lite offers 30 RPM on the free tier (eliminating the 429 rate limit errors)
+    # Targeting gemini-3.5-flash-lite for faster speeds and higher rate limits
     return genai.GenerativeModel(
-        model_name="gemini-2.0-flash-lite",
+        model_name="gemini-3.5-flash-lite",
         generation_config={
             "temperature": 0.1,
             "max_output_tokens": 1000
@@ -51,7 +51,7 @@ with col2:
             st.warning("Please paste some text to extract.")
         else:
             if format_choice == "Action Items & Summary":
-                prompt = f"""Extract concise structured data from this text. No filler introduction.
+                prompt = f"""Extract concise structured data from this text. No filler text.
 Format:
 1. Executive Summary (1-2 sentences)
 2. Decisions: (bullet list or 'None')
@@ -60,7 +60,7 @@ Format:
 Text:
 \"\"\"{raw_text}\"\"\""""
             elif format_choice == "Structured JSON":
-                prompt = f"""Extract all entities, dates, people, decisions, and tasks into raw, compact JSON only. No markdown formatting.
+                prompt = f"""Extract entities, dates, people, decisions, and tasks into raw, compact JSON only. No markdown formatting.
 
 Text:
 \"\"\"{raw_text}\"\"\""""
@@ -72,7 +72,7 @@ Text:
 
             try:
                 model = get_model(api_key)
-                with st.spinner("Extracting structured data..."):
+                with st.spinner("Extracting..."):
                     response = model.generate_content(prompt, stream=True)
                     
                     def stream_chunks():
@@ -82,8 +82,4 @@ Text:
 
                     st.write_stream(stream_chunks)
             except Exception as e:
-                err_msg = str(e)
-                if "429" in err_msg or "quota" in err_msg.lower():
-                    st.warning("The Google free tier key is cooling down. Please wait 15 seconds before clicking again.")
-                else:
-                    st.error(f"Error: {err_msg}")
+                st.error(f"Error: {str(e)}")
