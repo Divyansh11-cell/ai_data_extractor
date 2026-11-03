@@ -7,16 +7,21 @@ st.set_page_config(page_title="AI Data Extractor", page_icon="📋", layout="wid
 st.title("📋 Unstructured Text to Structured Data Transformer")
 st.write(
     "A Generative AI application that takes natural, disorganized paragraphs and extracts "
-    "structured schemas (Action Items, JSON, or Key-Value pairs) using low-temperature extraction."
+    "structured schemas (Action Items, JSON, or Key-Value pairs) using high-speed streaming."
 )
 
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
-if api_key:
-    genai.configure(api_key=api_key.strip())
-    model = genai.GenerativeModel(
+# Cache the model initialization so Streamlit doesn't reconnect on every run
+@st.cache_resource
+def get_model(key):
+    genai.configure(api_key=key.strip())
+    return genai.GenerativeModel(
         model_name="gemini-3.8-flash",
-        generation_config={"temperature": 0.1}
+        generation_config={
+            "temperature": 0.1,
+            "max_output_tokens": 800  # Caps length so responses finish 2x faster
+        }
     )
 
 col1, col2 = st.columns(2)
@@ -45,42 +50,34 @@ with col2:
         elif not raw_text.strip():
             st.warning("Please paste some text to extract.")
         else:
+            # Concise prompts generate output much faster
             if format_choice == "Action Items & Summary":
-                prompt = f"""
-You are an expert Data Extraction Engine. Extract structured data from this text.
-Do not hallucinate or extrapolate facts. Be concise.
+                prompt = f"""Extract concise structured data from this text. No filler text.
+Format:
+1. Executive Summary (1-2 sentences)
+2. Decisions: (bullet list or 'None')
+3. Action Items Table: | Task | Assignee | Deadline |
 
-Output format:
-1. Executive Summary (2 sentences max)
-2. Decisions Made (bulleted list, or 'None' if not applicable)
-3. Action Items Table: | Task | Assignee (Who) | Deadline |
-
-Source Paragraph:
-\"\"\"{raw_text}\"\"\"
-"""
+Text:
+\"\"\"{raw_text}\"\"\""""
             elif format_choice == "Structured JSON":
-                prompt = f"""
-Extract all key entities, dates, people, decisions, and tasks from the text into a clean, valid JSON object.
-Return ONLY valid JSON without markdown code fences or conversational text.
+                prompt = f"""Extract entities, dates, people, decisions, and tasks into raw, compact JSON only. No markdown formatting.
 
-Source Paragraph:
-\"\"\"{raw_text}\"\"\"
-"""
+Text:
+\"\"\"{raw_text}\"\"\""""
             elif format_choice == "Key-Value Entities":
-                prompt = f"""
-Identify and list all named entities, numeric quantities, locations, dates, and topics in a clean Key-Value Markdown list format.
+                prompt = f"""Extract named entities, quantities, dates, and topics in a concise Key-Value list.
 
-Source Paragraph:
-\"\"\"{raw_text}\"\"\"
-"""
+Text:
+\"\"\"{raw_text}\"\"\""""
 
-            # Automatic retry logic for 429 rate limit
-            max_retries = 3
-            success = False
-
+            model = get_model(api_key)
+            
+            # Fast execution with quick 4-second backoff
+            max_retries = 2
             for attempt in range(max_retries):
                 try:
-                    with st.spinner("Processing text with Gemini..."):
+                    with st.spinner("⚡ Extracting..."):
                         response = model.generate_content(prompt, stream=True)
                         
                         def stream_chunks():
@@ -89,17 +86,16 @@ Source Paragraph:
                                     yield chunk.text
 
                         st.write_stream(stream_chunks)
-                        success = True
                         break
 
                 except Exception as e:
                     err_msg = str(e)
                     if "429" in err_msg or "quota" in err_msg.lower():
                         if attempt < max_retries - 1:
-                            st.info("Free tier rate limit reached. Waiting a few seconds before retrying...")
-                            time.sleep(12)  # Wait before retrying
+                            st.info("API busy. Retrying in 4 seconds...")
+                            time.sleep(4)
                         else:
-                            st.warning("Google Free Tier limit reached (5 requests/min). Please wait about 30 seconds and try again.")
+                            st.warning("Free-tier quota limit reached (5 requests/min). Please wait 20 seconds before your next query.")
                     else:
                         st.error(f"Error: {err_msg}")
                         break
