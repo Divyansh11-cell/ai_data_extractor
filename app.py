@@ -1,26 +1,26 @@
 import streamlit as st
 import google.generativeai as genai
-import time
 
 st.set_page_config(page_title="AI Data Extractor", page_icon="📋", layout="wide")
 
 st.title("📋 Unstructured Text to Structured Data Transformer")
 st.write(
     "A Generative AI application that takes natural, disorganized paragraphs and extracts "
-    "structured schemas (Action Items, JSON, or Key-Value pairs) using high-speed streaming."
+    "structured schemas (Action Items, JSON, or Key-Value pairs) with high-speed streaming."
 )
 
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
-# Cache the model initialization so Streamlit doesn't reconnect on every run
+# Cache model configuration
 @st.cache_resource
 def get_model(key):
     genai.configure(api_key=key.strip())
+    # Flash-Lite offers 30 RPM on the free tier (eliminating the 429 rate limit errors)
     return genai.GenerativeModel(
-        model_name="gemini-3.8-flash",
+        model_name="gemini-2.0-flash-lite",
         generation_config={
             "temperature": 0.1,
-            "max_output_tokens": 800  # Caps length so responses finish 2x faster
+            "max_output_tokens": 1000
         }
     )
 
@@ -50,9 +50,8 @@ with col2:
         elif not raw_text.strip():
             st.warning("Please paste some text to extract.")
         else:
-            # Concise prompts generate output much faster
             if format_choice == "Action Items & Summary":
-                prompt = f"""Extract concise structured data from this text. No filler text.
+                prompt = f"""Extract concise structured data from this text. No filler introduction.
 Format:
 1. Executive Summary (1-2 sentences)
 2. Decisions: (bullet list or 'None')
@@ -61,41 +60,30 @@ Format:
 Text:
 \"\"\"{raw_text}\"\"\""""
             elif format_choice == "Structured JSON":
-                prompt = f"""Extract entities, dates, people, decisions, and tasks into raw, compact JSON only. No markdown formatting.
+                prompt = f"""Extract all entities, dates, people, decisions, and tasks into raw, compact JSON only. No markdown formatting.
 
 Text:
 \"\"\"{raw_text}\"\"\""""
             elif format_choice == "Key-Value Entities":
-                prompt = f"""Extract named entities, quantities, dates, and topics in a concise Key-Value list.
+                prompt = f"""Extract named entities, quantities, dates, and topics in a clean Key-Value Markdown list format.
 
 Text:
 \"\"\"{raw_text}\"\"\""""
 
-            model = get_model(api_key)
-            
-            # Fast execution with quick 4-second backoff
-            max_retries = 2
-            for attempt in range(max_retries):
-                try:
-                    with st.spinner("⚡ Extracting..."):
-                        response = model.generate_content(prompt, stream=True)
-                        
-                        def stream_chunks():
-                            for chunk in response:
-                                if chunk.text:
-                                    yield chunk.text
+            try:
+                model = get_model(api_key)
+                with st.spinner("Extracting structured data..."):
+                    response = model.generate_content(prompt, stream=True)
+                    
+                    def stream_chunks():
+                        for chunk in response:
+                            if chunk.text:
+                                yield chunk.text
 
-                        st.write_stream(stream_chunks)
-                        break
-
-                except Exception as e:
-                    err_msg = str(e)
-                    if "429" in err_msg or "quota" in err_msg.lower():
-                        if attempt < max_retries - 1:
-                            st.info("API busy. Retrying in 4 seconds...")
-                            time.sleep(4)
-                        else:
-                            st.warning("Free-tier quota limit reached (5 requests/min). Please wait 20 seconds before your next query.")
-                    else:
-                        st.error(f"Error: {err_msg}")
-                        break
+                    st.write_stream(stream_chunks)
+            except Exception as e:
+                err_msg = str(e)
+                if "429" in err_msg or "quota" in err_msg.lower():
+                    st.warning("The Google free tier key is cooling down. Please wait 15 seconds before clicking again.")
+                else:
+                    st.error(f"Error: {err_msg}")
